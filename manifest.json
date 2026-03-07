@@ -1,0 +1,15 @@
+{
+  "name": "Adra Électronique 313",
+  "short_name": "Adra313",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0d0d",
+  "theme_color": "#FFD700",
+  "icons": [
+    {
+      "src": "Sans titre-1.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
