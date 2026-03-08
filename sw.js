@@ -2,6 +2,7 @@ const CACHE_NAME = 'adra-cache-v1';
 const urlsToCache = [
   '/',
   '/index.html',
+  '/styles.css',
   '/script.js',
   '/manifest.json',
   '/Sans%20titre-1.png',
