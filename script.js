@@ -1,6 +1,41 @@
 // ===== VARIABLES GLOBALES =====
 let currentSlide = 0;
 
+const WHATSAPP_NUMBERS = {
+    principal: '221771359572',
+    commandes: '221760280674',
+    sav: '221710112255'
+};
+
+function getTrackingSource() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('src') || params.get('source') || 'site';
+}
+
+function trackEvent(eventName, payload = {}) {
+    const eventPayload = {
+        event: eventName,
+        source: getTrackingSource(),
+        timestamp: new Date().toISOString(),
+        ...payload
+    };
+
+    if (Array.isArray(window.dataLayer)) {
+        window.dataLayer.push(eventPayload);
+    }
+
+    console.log('tracking_event', eventPayload);
+}
+
+function openWhatsApp(message, target = WHATSAPP_NUMBERS.principal, context = 'general') {
+    const source = getTrackingSource();
+    const finalMessage = `${message}
+
+— Source: ${source}`;
+    trackEvent('whatsapp_open', { target, context });
+    window.open(`https://wa.me/${target}?text=${encodeURIComponent(finalMessage)}`, '_blank');
+}
+
 // ===== SPLASH SCREEN =====
 const splashScreen = document.getElementById('splashScreen');
 const splashVideo = document.getElementById('splashVideo');
@@ -10,8 +45,17 @@ const enableSoundBtn = document.getElementById('enableSoundBtn');
 const muteToggle = document.getElementById('muteToggle');
 
 if (splashVideo) {
+    const isMobileScreen = window.matchMedia('(max-width: 768px)').matches;
     splashVideo.muted = true;
     splashVideo.play().catch(e => console.log('Autoplay bloqué:', e));
+
+    if (isMobileScreen && splashVideo) {
+        setTimeout(() => {
+            if (splashScreen && !splashScreen.classList.contains('hidden')) {
+                splashScreen.classList.add('hidden');
+            }
+        }, 3500);
+    }
     
     if (enableSoundBtn) {
         enableSoundBtn.addEventListener('click', () => {
@@ -66,27 +110,41 @@ window.toggleChat = function() {
 };
 
 window.sendWhatsApp = function(type) {
-    const phone = '221771359572';
     let message = '';
-    
+    let target = WHATSAPP_NUMBERS.principal;
+
     switch(type) {
         case 'info':
-            message = 'Bonjour, pouvez-vous me donner plus d\'informations sur vos produits ?';
+            message = "Bonjour, pouvez-vous me donner plus d'informations sur vos produits ?";
             break;
         case 'reparation':
-            message = 'Bonjour, j\'ai besoin d\'une réparation pour mon téléphone';
+            target = WHATSAPP_NUMBERS.sav;
+            message = "Bonjour, j'ai besoin d'une réparation pour mon téléphone";
             break;
         case 'disponibilite':
+            target = WHATSAPP_NUMBERS.commandes;
             message = 'Bonjour, est-ce que ce produit est disponible ?';
+            break;
+        case 'catalogue':
+            target = WHATSAPP_NUMBERS.commandes;
+            message = "Bonjour, je veux recevoir votre catalogue complet avec les prix du jour.";
+            break;
+        case 'promo':
+            target = WHATSAPP_NUMBERS.commandes;
+            message = "Bonjour, pouvez-vous m'envoyer vos promotions actuelles ?";
+            break;
+        case 'support':
+            target = WHATSAPP_NUMBERS.sav;
+            message = "Bonjour, j'ai besoin d'assistance SAV.";
             break;
         case 'contact':
             message = 'Bonjour, je souhaite vous contacter';
             break;
         default:
-            message = 'Bonjour, je souhaite avoir plus d\'informations';
+            message = "Bonjour, je souhaite avoir plus d'informations";
     }
-    
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+
+    openWhatsApp(message, target, `chat_${type}`);
 };
 
 // ===== COMPTOIR VISITEURS =====
@@ -124,11 +182,13 @@ function initCarousel() {
     
     window.nextSlide = function() {
         currentSlide = (currentSlide + 1) % slides.length;
+        trackEvent('carousel_next', { slide: currentSlide });
         updateCarousel();
     };
     
     window.prevSlide = function() {
         currentSlide = (currentSlide - 1 + slides.length) % slides.length;
+        trackEvent('carousel_prev', { slide: currentSlide });
         updateCarousel();
     };
     
@@ -144,8 +204,7 @@ initCarousel();
 
 // ===== COMMANDE PRODUIT =====
 window.orderProduct = function(name) {
-    const phone = '221771359572';
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent('Bonjour, je souhaite connaître le prix du ' + name)}`, '_blank');
+    openWhatsApp('Bonjour, je souhaite connaître le prix du ' + name, WHATSAPP_NUMBERS.commandes, 'product_order');
 };
 
 // ===== CALCULATEUR DE LIVRAISON =====
@@ -191,22 +250,36 @@ window.closePopup = function() {
     }
 };
 
+window.sendExitOffer = function() {
+    const exitPhoneInput = document.getElementById('exitPhone');
+    const clientPhone = exitPhoneInput?.value?.trim() || '';
+
+    const message = clientPhone
+        ? `Bonjour, je veux recevoir vos offres exclusives. Mon numéro WhatsApp: ${clientPhone}`
+        : 'Bonjour, je veux recevoir vos offres exclusives WhatsApp.';
+
+    openWhatsApp(message, WHATSAPP_NUMBERS.commandes, 'exit_offer');
+
+    if (exitPhoneInput) {
+        exitPhoneInput.value = '';
+    }
+    window.closePopup();
+};
+
 window.sendFunWhatsApp = function() {
-    const phone = '221771359572';
-    
     // Messages aléatoires pour plus de fun
     const messages = [
-        '😂 Salut Adra Électronique ! Je me suis fait attraper par votre pop-up trop fun... Du coup je veux profiter des offres de fou ! Parle-moi des meilleurs prix pour les téléphones et accessoires s\'il te plaît ! 🚀📱🔥',
-        '🤣 Oh non vous m\'avez chopé ! Bon OK je craque... Dites-moi tout sur vos meilleures affaires ! 🎁✨',
+        '😂 Salut Adra Électronique ! Je me suis fait attraper par votre pop-up trop fun... Du coup je veux profiter des offres de fou ! Parle-moi des meilleurs prix pour les téléphones et accessoires s\\'il te plaît ! 🚀📱🔥',
+        '🤣 Oh non vous m\\'avez chopé ! Bon OK je craque... Dites-moi tout sur vos meilleures affaires ! 🎁✨',
         '😆 Votre pop-up est plus fort que ma volonté de partir ! Alors allez-y, envoyez-moi vos meilleures offres ! 💪📱',
-        '🦸‍♂️ Vous m\'avez eu ! Je reviens dare-dare pour connaître vos promos de ouf ! 💥🔥',
-        '🏃‍♂️💨 J\'essayais de partir mais vous êtes plus rapides ! Bon... Qu\'est-ce que vous avez de beau en ce moment ?'
+        '🦸‍♂️ Vous m\\'avez eu ! Je reviens dare-dare pour connaître vos promos de ouf ! 💥🔥',
+        '🏃‍♂️💨 J\\'essayais de partir mais vous êtes plus rapides ! Bon... Qu\\'est-ce que vous avez de beau en ce moment ?'
     ];
     
     // Choisir un message aléatoire
     const randomMessage = messages[Math.floor(Math.random() * messages.length)];
     
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(randomMessage)}`, '_blank');
+    openWhatsApp(randomMessage, WHATSAPP_NUMBERS.principal, 'fun_popup');
     
     // Animation de fermeture
     const popup = document.getElementById('exitPopup');
@@ -235,9 +308,9 @@ if (contactForm) {
             return;
         }
         
-        const whatsappMessage = `Bonjour Adra Électronique 313%0A%0A📱 *Nouveau message de ${encodeURIComponent(name)}*%0A%0A📞 Téléphone: ${encodeURIComponent(phone)}%0A📌 Sujet: ${encodeURIComponent(subject)}%0A💬 Message: ${encodeURIComponent(message)}%0A%0AMerci de me répondre rapidement.`;
+        const whatsappMessage = `Bonjour Adra Électronique 313\n\n📱 Nouveau message de ${name}\n\n📞 Téléphone: ${phone}\n📌 Sujet: ${subject}\n💬 Message: ${message}\n\nMerci de me répondre rapidement.`;
         
-        window.open(`https://wa.me/221771359572?text=${whatsappMessage}`, '_blank');
+        openWhatsApp(whatsappMessage, WHATSAPP_NUMBERS.principal, 'contact_form');
         this.reset();
         alert('✅ Message envoyé ! Vous allez être redirigé vers WhatsApp.');
     });
@@ -282,8 +355,12 @@ document.querySelectorAll('section').forEach(section => {
 // ===== SMOOTH SCROLL POUR LES ANCRES =====
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function(e) {
+        const href = this.getAttribute('href');
+        if (!href || href === '#') {
+            return;
+        }
         e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
+        const target = document.querySelector(href);
         if (target) {
             target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
