@@ -1,5 +1,6 @@
 // ===== VARIABLES GLOBALES =====
 let currentSlide = 0;
+let splashTimeout;
 
 const WHATSAPP_NUMBERS = {
     principal: '221771359572',
@@ -36,7 +37,7 @@ function openWhatsApp(message, target = WHATSAPP_NUMBERS.principal, context = 'g
     window.open(`https://wa.me/${target}?text=${encodeURIComponent(finalMessage)}`, '_blank');
 }
 
-// ===== SPLASH SCREEN =====
+// ===== SPLASH SCREEN CORRIGÉ =====
 const splashScreen = document.getElementById('splashScreen');
 const splashVideo = document.getElementById('splashVideo');
 const progressBar = document.getElementById('progressBar');
@@ -44,61 +45,126 @@ const soundPermission = document.getElementById('soundPermission');
 const enableSoundBtn = document.getElementById('enableSoundBtn');
 const muteToggle = document.getElementById('muteToggle');
 
-if (splashVideo) {
-    const isMobileScreen = window.matchMedia('(max-width: 768px)').matches;
-    splashVideo.muted = true;
-    splashVideo.play().catch(e => console.log('Autoplay bloqué:', e));
-
-    if (isMobileScreen && splashVideo) {
+function hideSplashScreen() {
+    if (splashScreen) {
+        splashScreen.classList.add('hidden');
+        // Petit délai pour que l'animation se termine avant de retirer du DOM
         setTimeout(() => {
-            if (splashScreen && !splashScreen.classList.contains('hidden')) {
-                splashScreen.classList.add('hidden');
+            splashScreen.style.display = 'none';
+        }, 800);
+    }
+}
+
+if (splashVideo) {
+    // Configuration initiale
+    splashVideo.muted = true;
+    splashVideo.volume = 0;
+    
+    // Gestion de la lecture automatique
+    const playPromise = splashVideo.play();
+    
+    if (playPromise !== undefined) {
+        playPromise.catch(error => {
+            console.log('Autoplay bloqué par le navigateur:', error);
+            // Afficher le bouton d'activation du son si l'autoplay est bloqué
+            if (soundPermission) {
+                soundPermission.style.display = 'flex';
             }
-        }, 3500);
+        });
     }
     
+    // Barre de progression
+    let progressInterval;
+    
+    function startProgressBar() {
+        let progress = 0;
+        progressInterval = setInterval(() => {
+            progress += 1;
+            if (progressBar) {
+                progressBar.style.width = (progress / 10) * 100 + '%'; // 10 secondes max
+            }
+            if (progress >= 100) {
+                clearInterval(progressInterval);
+            }
+        }, 100);
+    }
+    
+    startProgressBar();
+    
+    // Quand la vidéo se termine
+    splashVideo.addEventListener('ended', function() {
+        clearInterval(progressInterval);
+        hideSplashScreen();
+    });
+    
+    // Si la vidéo dure moins longtemps que prévu
+    splashVideo.addEventListener('durationchange', function() {
+        const duration = splashVideo.duration;
+        if (duration && !isNaN(duration)) {
+            clearInterval(progressInterval);
+            // Recalculer l'intervalle basé sur la durée réelle
+            let progress = 0;
+            progressInterval = setInterval(() => {
+                progress += 1;
+                const percent = (progress / (duration * 10)) * 100;
+                if (progressBar) {
+                    progressBar.style.width = percent + '%';
+                }
+                if (progress >= duration * 10) {
+                    clearInterval(progressInterval);
+                }
+            }, 100);
+        }
+    });
+    
+    // Timeout de sécurité (15 secondes max)
+    setTimeout(() => {
+        if (splashScreen && !splashScreen.classList.contains('hidden')) {
+            clearInterval(progressInterval);
+            hideSplashScreen();
+        }
+    }, 15000);
+    
+    // Bouton pour activer le son
     if (enableSoundBtn) {
-        enableSoundBtn.addEventListener('click', () => {
+        enableSoundBtn.addEventListener('click', function() {
             splashVideo.muted = false;
             splashVideo.volume = 1.0;
             if (soundPermission) soundPermission.style.display = 'none';
             if (muteToggle) muteToggle.innerHTML = '<i class="fas fa-volume-up"></i>';
-            splashVideo.play();
+            // Relancer la vidéo si elle est en pause
+            if (splashVideo.paused) {
+                splashVideo.play();
+            }
         });
     }
     
+    // Bouton mute/unmute
     if (muteToggle) {
-        muteToggle.addEventListener('click', () => {
+        muteToggle.addEventListener('click', function() {
             if (splashVideo.muted) {
                 splashVideo.muted = false;
+                splashVideo.volume = 1.0;
                 muteToggle.innerHTML = '<i class="fas fa-volume-up"></i>';
                 muteToggle.title = "Couper le son";
             } else {
                 splashVideo.muted = true;
+                splashVideo.volume = 0;
                 muteToggle.innerHTML = '<i class="fas fa-volume-mute"></i>';
                 muteToggle.title = "Activer le son";
             }
         });
     }
     
-    let progress = 0;
-    const interval = setInterval(() => {
-        progress += 1;
-        if (progressBar) {
-            progressBar.style.width = (progress / 15) * 100 + '%';
-        }
-    }, 100);
-    
-    splashVideo.addEventListener('ended', () => {
-        clearInterval(interval);
-        if (splashScreen) splashScreen.classList.add('hidden');
-    });
-    
+    // Bouton passer
     const skipButton = document.getElementById('skipSplash');
     if (skipButton) {
-        skipButton.addEventListener('click', () => {
-            clearInterval(interval);
-            if (splashScreen) splashScreen.classList.add('hidden');
+        skipButton.addEventListener('click', function() {
+            clearInterval(progressInterval);
+            hideSplashScreen();
+            // Arrêter la vidéo
+            splashVideo.pause();
+            splashVideo.currentTime = 0;
         });
     }
 }
@@ -106,7 +172,9 @@ if (splashVideo) {
 // ===== CHAT WHATSAPP =====
 window.toggleChat = function() {
     const chat = document.getElementById('whatsappChat');
-    if (chat) chat.classList.toggle('minimized');
+    if (chat) {
+        chat.classList.toggle('minimized');
+    }
 };
 
 window.sendWhatsApp = function(type) {
@@ -160,9 +228,11 @@ setInterval(() => {
 function initCarousel() {
     const slides = document.querySelectorAll('.carousel-item');
     const dotsContainer = document.getElementById('carouselDots');
+    const carouselInner = document.getElementById('carouselInner');
     
-    if (slides.length === 0 || !dotsContainer) return;
+    if (slides.length === 0 || !dotsContainer || !carouselInner) return;
     
+    // Créer les dots
     slides.forEach((_, index) => {
         const dot = document.createElement('span');
         dot.classList.add('dot');
@@ -171,7 +241,6 @@ function initCarousel() {
     });
     
     function updateCarousel() {
-        const carouselInner = document.getElementById('carouselInner');
         if (carouselInner) {
             carouselInner.style.transform = `translateX(-${currentSlide * 100}%)`;
         }
@@ -197,10 +266,22 @@ function initCarousel() {
         updateCarousel();
     }
     
-    setInterval(() => window.nextSlide(), 5000);
+    // Auto-slide toutes les 5 secondes
+    setInterval(() => {
+        if (slides.length > 0) {
+            window.nextSlide();
+        }
+    }, 5000);
+    
     updateCarousel();
 }
-initCarousel();
+
+// Initialiser le carrousel quand le DOM est chargé
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCarousel);
+} else {
+    initCarousel();
+}
 
 // ===== COMMANDE PRODUIT =====
 window.orderProduct = function(name) {
@@ -225,10 +306,15 @@ window.calculerLivraison = function() {
     const deliveryResult = document.getElementById('deliveryResult');
     if (deliveryResult) {
         deliveryResult.innerHTML = `<strong>Frais de livraison : ${frais.toLocaleString()} FCFA</strong>`;
+        // Animation
+        deliveryResult.style.animation = 'pulse 0.5s';
+        setTimeout(() => {
+            deliveryResult.style.animation = '';
+        }, 500);
     }
 };
 
-// ===== POP-UP DE SORTIE FUN =====
+// ===== POP-UP DE SORTIE =====
 let popupShown = false;
 
 document.addEventListener('mouseleave', (e) => {
@@ -236,17 +322,17 @@ document.addEventListener('mouseleave', (e) => {
     if (e.clientY <= 0 && !popupShown && exitPopup) {
         exitPopup.style.display = 'flex';
         popupShown = true;
-        
-        // Petit effet sonore amusant (optionnel - décommente si tu veux)
-        // const audio = new Audio('https://www.myinstants.com/media/sounds/mario-coin.mp3');
-        // audio.play().catch(() => {});
     }
 });
 
 window.closePopup = function() {
     const exitPopup = document.getElementById('exitPopup');
     if (exitPopup) {
-        exitPopup.style.display = 'none';
+        exitPopup.style.animation = 'fadeOut 0.3s';
+        setTimeout(() => {
+            exitPopup.style.display = 'none';
+            exitPopup.style.animation = '';
+        }, 300);
     }
 };
 
@@ -266,33 +352,7 @@ window.sendExitOffer = function() {
     window.closePopup();
 };
 
-window.sendFunWhatsApp = function() {
-    // Messages aléatoires pour plus de fun
-    const messages = [
-        '😂 Salut Adra Électronique ! Je me suis fait attraper par votre pop-up trop fun... Du coup je veux profiter des offres de fou ! Parle-moi des meilleurs prix pour les téléphones et accessoires s\\'il te plaît ! 🚀📱🔥',
-        '🤣 Oh non vous m\\'avez chopé ! Bon OK je craque... Dites-moi tout sur vos meilleures affaires ! 🎁✨',
-        '😆 Votre pop-up est plus fort que ma volonté de partir ! Alors allez-y, envoyez-moi vos meilleures offres ! 💪📱',
-        '🦸‍♂️ Vous m\\'avez eu ! Je reviens dare-dare pour connaître vos promos de ouf ! 💥🔥',
-        '🏃‍♂️💨 J\\'essayais de partir mais vous êtes plus rapides ! Bon... Qu\\'est-ce que vous avez de beau en ce moment ?'
-    ];
-    
-    // Choisir un message aléatoire
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    
-    openWhatsApp(randomMessage, WHATSAPP_NUMBERS.principal, 'fun_popup');
-    
-    // Animation de fermeture
-    const popup = document.getElementById('exitPopup');
-    popup.style.animation = 'bounceIn 0.5s reverse';
-    setTimeout(() => {
-        popup.style.display = 'none';
-        popup.style.animation = '';
-    }, 500);
-    
-    alert('🎉 Direction WhatsApp pour des offres explosives !');
-};
-
-// ===== FORMULAIRE DE CONTACT (UNIQUEMENT WHATSAPP) =====
+// ===== FORMULAIRE DE CONTACT =====
 const contactForm = document.getElementById('contactForm');
 if (contactForm) {
     contactForm.addEventListener('submit', function(e) {
@@ -367,12 +427,12 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
-// ===== PETITE BLAGUE DANS LA CONSOLE (pour les développeurs) =====
+// ===== MESSAGES DE BIENVENUE =====
 console.log('%c🔥 Adra Électronique 313 🔥', 'color: #FFD700; font-size: 20px; font-weight: bold;');
 console.log('%c🚀 Site chargé avec succès !', 'color: #25D366; font-size: 16px;');
 console.log('%c😎 Prêt à vendre des téléphones !', 'color: #FFA500; font-size: 14px;');
 
-// ===== BONUS: MESSAGE DU JOUR =====
+// Message aléatoire
 const messagesDuJour = [
     "💡 Le saviez-vous ? Nos réparations sont plus rapides qu'un éclair !",
     "📱 Aujourd'hui c'est le bon jour pour acheter un nouveau téléphone !",
